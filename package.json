@@ -1,0 +1,15 @@
+{
+  "name": "zbydhnm",
+  "version": "1.0.0",
+  "description": "Anonim forum ve sosyal platform",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "express": "^5.2.1"
+  }
+}

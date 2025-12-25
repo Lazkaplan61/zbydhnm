@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <title>Zbydhnm – Moderatör Paneli</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #0d0d0d;
+      color: #e0e0e0;
+    }
+
+    header {
+      background: linear-gradient(90deg, #5a0000, #200000);
+      padding: 15px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 18px;
+      color: #ff5252;
+    }
+
+    .admin-badge {
+      font-weight: bold;
+      color: #ff5252;
+    }
+
+    .container {
+      padding: 20px;
+    }
+
+    .panel-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 15px;
+    }
+
+    .card {
+      background: #141414;
+      border: 1px solid #2a2a2a;
+      padding: 15px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+
+    .card:hover {
+      background: #1c1c1c;
+      border-color: #ff5252;
+    }
+
+    .card h3 {
+      margin-top: 0;
+      color: #ff5252;
+    }
+
+    .hidden-note {
+      margin-top: 30px;
+      font-size: 12px;
+      opacity: 0.35;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>🛡 Moderatör Paneli</h1>
+  <div>
+    <span id="modNick">Yönetici</span>
+    <span class="admin-badge">[Yönetici]</span>
+  </div>
+</header>
+
+<div class="container">
+
+  <div class="panel-grid">
+
+    <div class="card">
+      <h3>🚩 Raporlar</h3>
+      <p>Gönderi, yorum, DM ve not raporlarını incele.</p>
+    </div>
+
+    <div class="card">
+      <h3>💬 DM İnceleme</h3>
+      <p>Şüpheli veya bildirilen özel mesajları görüntüle.</p>
+    </div>
+
+    <div class="card">
+      <h3>🗂 Kategoriler</h3>
+      <p>Kategori sil / kontrol et.</p>
+    </div>
+
+    <div class="card">
+      <h3>📝 Gönderiler</h3>
+      <p>Gönderi ve yorum silme işlemleri.</p>
+    </div>
+
+    <div class="card">
+      <h3>👤 IP İşlemleri</h3>
+      <p>IP ban / mute / kontrol.</p>
+    </div>
+
+    <div class="card">
+      <h3>📜 Loglar</h3>
+      <p>Girişler, silmeler, sistem olayları.</p>
+    </div>
+
+  </div>
+
+  <div class="hidden-note">
+    Bu panel yalnızca yetkili kullanıcılar içindir.  
+    Platform güvenliği kapsamında teknik incelemeler yapılabilir.
+  </div>
+
+</div>
+
+<script>
+  const isAdmin = localStorage.getItem("isAdmin");
+  const nick = localStorage.getItem("adminNick");
+
+  if (isAdmin !== "yes") {
+    document.body.innerHTML = "<h2 style='color:red;padding:20px'>Yetkisiz erişim</h2>";
+  } else {
+    document.getElementById("modNick").innerText = nick || "Yönetici";
+  }
+</script>
+
+</body>
+</html>
+<hr style="margin:30px 0;border-color:#333">
+
+<h3>⚠️ Hızlı Yetkiler</h3>
+
+<input id="targetIp" placeholder="Hedef IP" style="padding:6px;width:200px">
+
+<button onclick="banIp()">IP Ban</button>
+<button onclick="muteIp()">Mute</button>
+
+<script>
+async function banIp() {
+  const ip = document.getElementById("targetIp").value;
+  await fetch("/api/mod/ban", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-mod": "yes"
+    },
+    body: JSON.stringify({ ip, reason: "Mod paneli" })
+  });
+  alert("IP banlandı");
+}
+
+async function muteIp() {
+  const ip = document.getElementById("targetIp").value;
+  await fetch("/api/mod/mute", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-mod": "yes"
+    },
+    body: JSON.stringify({ ip, until: "permanent" })
+  });
+  alert("Mute uygulandı");
+}
+</script>
+if (dm.watched) {
+  div.style.background = "#2a0000";
+  div.innerHTML += "<div style='color:#ff5252;font-size:12px'>👁 Takipte</div>";
+}

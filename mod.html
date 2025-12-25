@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <title>Moderatör Paneli</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="/css/theme.css">
+  <style>
+    #modLogout{ margin-left:12px;background:#555;color:#fff;border:none;padding:6px 8px;border-radius:4px;cursor:pointer; transition:background .15s,transform .08s; }
+    #modLogout:hover{ background:#444; transform:translateY(-1px); }
+    .mod-toast{ position:fixed; right:16px; top:16px; background:#111; color:#fff; padding:8px 12px; border-radius:6px; box-shadow:0 2px 10px rgba(0,0,0,.5); z-index:10000; opacity:0; transition:opacity .2s; }
+    .mod-toast.show{ opacity:1; }
+  </style>
+</head>
+<body class="mod">
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <div class="logo" id="modNick">Yönetici</div>
+    <nav>
+      <span class="mod-badge">YÖNETİCİ PANELİ</span>
+      <button id="modLogout" style="margin-left:12px;background:#555;color:#fff;border:none;padding:6px 8px;border-radius:4px;cursor:pointer;">Çıkış</button>
+    </nav>
+  </div>
+</div>
+
+<div style="padding:20px;">
+
+  <h2>🚨 Moderasyon Merkezi</h2>
+  <p style="opacity:0.8;font-size:13px">Tüm moderasyon işlemleri sunucu tarafından loglanmaktadır.</p>
+
+  <div class="card">
+    <h3>📁 Kategoriler</h3>
+    <div id="cats"></div>
+  </div>
+
+  <div class="card">
+    <h3>📝 Postlar</h3>
+    <div id="posts"></div>
+  </div>
+
+  <div id="dmsSection" class="card">
+    <h3>💬 Gizli DM İnceleme</h3>
+    <div id="dms"></div>
+  </div>
+
+  <div id="bans" class="card">
+    <h3>⛔ Yasaklı IP'ler</h3>
+    <div id="bansList">Yükleniyor...</div>
+    <div style="margin-top:8px;display:flex;gap:8px;align-items:center;">
+      <input id="banIp" placeholder="IP adresi">
+      <button id="banBtn">Banla</button>
+      <button id="refreshBans">Yenile</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* güvenlik */
+if (localStorage.getItem("mod") !== "1") {
+  // gösterilecek giriş formu
+  document.body.innerHTML = `
+    <div class="container" style="padding:20px;max-width:700px;margin:30px auto;">
+      <h2>Moderatör Girişi</h2>
+      <div class="card">
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <input id="modNickInput" placeholder="Nick">
+          <input id="modPassword" placeholder="Şifre" type="password">
+          <div style="display:flex;gap:8px;margin-top:8px;">
+            <button id="modLoginBtn">Giriş</button>
+            <a href="/" style="align-self:center;opacity:0.8">Geri</a>
+          </div>
+          <p style="opacity:0.7;font-size:13px;margin-top:8px;">Şifreyi girdikten sonra panel açılacaktır.</p>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('modLoginBtn').addEventListener('click', async () => {
+    const nick = document.getElementById('modNickInput').value.trim();
+    const password = document.getElementById('modPassword').value;
+    if (!password) return alert('Şifre gerekli');
+
+    // debug: show payload in console (will not send password elsewhere)
+    console.log('[MOD-LOGIN] sending', { nick, passwordLength: (password||'').length });
+
+    try {
+      const res = await fetch('/api/mod-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nick, password })
+      });
+
+      // show response details for debugging
+      if (!res.ok) {
+        let bodyText = '';
+        try { bodyText = await res.text(); } catch(e) { bodyText = '(no body)'; }
+        console.error('[MOD-LOGIN] failed', res.status, bodyText);
+        alert('Giriş başarısız (kod: ' + res.status + ')\n' + bodyText);
+        return;
+      }
+
+      const data = await res.json();
+      console.log('[MOD-LOGIN] success', data);
+      localStorage.setItem('mod', '1');
+      localStorage.setItem('modNick', data.nick || nick || 'Yönetici');
+      location.href = '/mod.html';
+    } catch (e) {
+      console.error('[MOD-LOGIN] error', e);
+      alert('Giriş yapılamadı — ağ hatası veya sunucu yanıtı yok. Konsolu kontrol edin.');
+    }
+  });
+
+  // stop executing the rest of the script to prevent panel rendering
+  return;
+}
+
+document.getElementById("modNick").innerText =
+  localStorage.getItem("modNick") || "Yönetici";
+
+// logout handler (confirm + toast)
+try {
+  const logoutBtn = document.getElementById('modLogout');
+  if (logoutBtn) {
+    logoutBtn.addEventListener('click', () => {
+      if (!confirm('Çıkış yapmak istediğinize emin misiniz?')) return;
+      localStorage.removeItem('mod');
+      localStorage.removeItem('modNick');
+
+      const t = document.createElement('div');
+      t.className = 'mod-toast';
+      t.innerText = 'Çıkış yapıldı';
+      document.body.appendChild(t);
+      // trigger show transition
+      setTimeout(() => t.classList.add('show'), 10);
+      setTimeout(() => { try { t.classList.remove('show'); } catch(e){} }, 1200);
+      setTimeout(() => location.href = '/', 1400);
+    });
+  }
+} catch(e) { /* ignore */ }
+
+/* kategoriler */
+fetch("/api/categories")
+  .then(r => r.json())
+  .then(list => {
+    const div = document.getElementById("cats");
+    list.forEach(c => {
+      div.innerHTML += `
+        <div class="post">
+          ${c.name}
+          <button onclick="delCat(${c.id})" style="float:right;background:#dc2626;">Sil</button>
+        </div>
+      `;
+    });
+  });
+
+function delCat(id) {
+  if (!confirm("Kategori silinsin mi?")) return;
+  fetch("/api/mod/delete-category/" + id, { method: "DELETE" })
+    .then(() => location.reload());
+}
+
+// Helper: simple HTML escape
+function escapeHtml(str) {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// Load private DMs for moderator
+fetch("/api/mod/dms")
+  .then(r => r.json())
+  .then(list => {
+    const div = document.getElementById("dms");
+    if (!div) return;
+
+    list.forEach(conv => {
+      // conversation header
+      let html = `<div class="post">
+        <b>${escapeHtml(conv.users[0])} ↔ ${escapeHtml(conv.users[1])}</b>
+        <div style="margin-top:8px">`;
+
+      // messages
+      conv.messages.forEach(m => {
+        const pinned = m.pinned ? '<span style="color:#fbbf24;margin-left:8px">📌</span>' : '';
+        html += `
+          <div style="margin:8px 0;padding:8px;border-radius:8px;background:rgba(255,255,255,0.02);">
+            <div style="font-size:12px;color:var(--muted);">${escapeHtml(m.sender)} <small>${new Date(m.time).toLocaleString()}</small> ${pinned}</div>
+            <div style="margin-top:6px">${escapeHtml(m.text)}</div>
+            <div style="margin-top:6px;display:flex;gap:8px;">
+              <button class="pinBtn" data-conv="${conv.id}" data-id="${m.id}">📌 Pin</button>
+              <button class="delMsgBtn" data-conv="${conv.id}" data-id="${m.id}" style="background:#dc2626">Sil</button>
+              <button class="muteBtn" data-sender="${escapeHtml(m.sender)}">Mute</button>
+              <button class="banBtn" data-sender="${escapeHtml(m.sender)}" style="background:#e11d48">Ban</button>
+              <button class="disguiseBtn" data-conv="${conv.id}">Disguise</button>
+            </div>
+          </div>`;
+      });
+
+      html += `</div></div>`;
+      div.innerHTML += html;
+    });
+
+    // attach delegation handlers
+    div.addEventListener('click', async (e) => {
+      const pin = e.target.closest('.pinBtn');
+      if (pin) {
+        const convId = pin.dataset.conv;
+        const msgId = pin.dataset.id;
+        if (!confirm('Bu mesajı sabitlemek istiyor musunuz?')) return;
+        await fetch('/api/mod/dm/pin', { method: 'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ convId, messageId: msgId }) });
+        location.reload();
+        return;
+      }
+
+      const del = e.target.closest('.delMsgBtn');
+      if (del) {
+        const convId = del.dataset.conv;
+        const msgId = del.dataset.id;
+        if (!confirm('Bu mesajı kalıcı olarak silmek istiyor musunuz?')) return;
+        await fetch('/api/mod/dm/' + encodeURIComponent(convId) + '/message/' + encodeURIComponent(msgId), { method: 'DELETE' });
+        location.reload();
+        return;
+      }
+
+      const mute = e.target.closest('.muteBtn');
+      if (mute) {
+        const sender = mute.dataset.sender;
+        if (!confirm(sender + ' kullanıcısını mute etmek istiyor musunuz?')) return;
+        await fetch('/api/mod/mute', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ ip: sender }) });
+        alert('Mute uygulandı');
+        return;
+      }
+
+      const ban = e.target.closest('.banBtn');
+      if (ban) {
+        const sender = ban.dataset.sender;
+        if (!confirm(sender + ' kullanıcısını banlamak istiyor musunuz?')) return;
+        await fetch('/api/mod/ban', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ ip: sender }) });
+        alert('Ban uygulandı');
+        return;
+      }
+
+      const dis = e.target.closest('.disguiseBtn');
+      if (dis) {
+        const convId = dis.dataset.conv;
+        const alias = prompt('Maske adı (alias) girin:');
+        if (!alias) return;
+        const text = prompt('Göndermek istediğiniz mesajı girin:');
+        if (!text) return;
+        await fetch('/api/mod/dm/send-as', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ convId, text, alias }) });
+        alert('Mesaj gönderildi (disguise)');
+        location.reload();
+        return;
+      }
+    });
+
+  })
+  .catch(() => {
+    // ignore errors silently in panel
+  });
+
+// Bans management
+async function loadBans() {
+  try {
+    const res = await fetch('/api/mod/bans');
+    if (!res.ok) throw new Error('Ağ hatası');
+    const list = await res.json();
+    const div = document.getElementById('bansList');
+    if (!div) return;
+    if (!Array.isArray(list) || list.length === 0) {
+      div.innerHTML = '<p>Henüz ban yok.</p>';
+      return;
+    }
+    div.innerHTML = list.map(ip => `
+      <div class="post">${ip} <button class="unbanBtn" data-ip="${ip}" style="float:right; background:#16a34a;">Kaldır</button></div>
+    `).join('');
+  } catch (e) {
+    const div = document.getElementById('bansList'); if (div) div.innerText = 'Ban listesi alınamadı.';
+  }
+}
+
+document.getElementById('banBtn').addEventListener('click', async () => {
+  const ip = document.getElementById('banIp').value.trim();
+  if (!ip) return alert('IP gerekli');
+  try {
+    const res = await fetch('/api/mod/ban', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ip }) });
+    if (!res.ok) throw new Error('Sunucu hatası');
+    document.getElementById('banIp').value = '';
+    await loadBans();
+  } catch (e) { alert('Ban eklenemedi.'); }
+});
+
+document.getElementById('refreshBans').addEventListener('click', loadBans);
+
+document.addEventListener('click', e => {
+  if (e.target && e.target.classList.contains('unbanBtn')) {
+    const ip = e.target.dataset.ip;
+    if (!confirm(ip + ' banı kaldırılsın mı?')) return;
+    fetch('/api/mod/ban/' + encodeURIComponent(ip), { method: 'DELETE' })
+      .then(() => loadBans());
+  }
+});
+
+// initial load
+loadBans();
+</script>
+
+</body>
+</html>
+app.post("/api/mod/watch", (req, res) => {
+  if (req.headers["x-mod"] !== "yes") return res.sendStatus(403);
+
+  const { ip, note } = req.body;
+  const data = JSON.parse(fs.readFileSync(watchFile));
+
+  if (!data.watch.find(w => w.ip === ip)) {
+    data.watch.push({
+      ip,
+      note: note || "Takipte",
+      time: new Date().toISOString()
+    });
+    fs.writeFileSync(watchFile, JSON.stringify(data, null, 2));
+  }
+
+  res.json({ ok: true });
+});
